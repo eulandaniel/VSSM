@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="page-head">
+  <p class="eyebrow">Histórico</p>
+  <h1>Resultados das validações</h1>
+  <p>Consulta acumulada das validações anteriores, com rastreabilidade dos modelos, falhas e métricas principais.</p>
+</div>
+
+<div class="card wide">
+  <h3>Histórico de validações</h3>
+  <p class="small">Cada registro guarda data, base, modelos selecionados, modelos válidos, falhas, modelo com maior SARH e principais métricas.</p>
+
+  <div class="actions">
+    <a class="btn" href="{{ url_for('main.index') }}">← Voltar ao início</a>
+    <a class="btn primary" href="{{ url_for('main.upload') }}">Nova validação →</a>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Data/Hora</th>
+          <th>Comentários</th>
+          <th>Empates</th>
+          <th>Modelos</th>
+          <th>Modelo com maior SARH</th>
+          <th>SARH</th>
+          <th>Accuracy</th>
+          <th>Detalhes</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for item in history %}
+        <tr>
+          <td>{{ item.created_at }}</td>
+          <td>
+            {{ item.valid_comments if item.valid_comments is defined else item.dataset_rows }}
+            /
+            {{ item.total_comments if item.total_comments is defined else item.dataset_rows }}
+          </td>
+          <td>{{ item.tie_comments if item.tie_comments is defined else '-' }}</td>
+          <td>
+            {{ item.models_selected if item.models_selected is defined else item.models_tested }} selecionados
+            <br>
+            <small>
+              {{ item.models_valid if item.models_valid is defined else item.valid_models }} válidos /
+              {{ item.models_failed if item.models_failed is defined else item.failed_models }} falhas
+            </small>
+          </td>
+          <td><b>{{ item.winner_provider }} / {{ item.winner_model }}</b></td>
+          <td><b>{{ '%.4f'|format((item.sarh if item.sarh is defined else item.framework_score)) }}</b></td>
+          <td>{{ '%.3f'|format(item.accuracy if item.accuracy is defined else 0) }}</td>
+          <td>
+            {% if item.run_id %}
+              <a class="btn small-btn" href="{{ url_for('main.history_detail', run_id=item.run_id) }}">Ver detalhes</a>
+            {% else %}
+              -
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8">Ainda não há validações registradas.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

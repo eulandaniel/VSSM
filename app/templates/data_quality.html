@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="page-head">
+  <p class="eyebrow">Fase 2</p>
+  <h1>Qualidade da base e referência humana</h1>
+  <p>Auditoria da rotulagem recebida, normalização dos julgamentos e consolidação da referência humana.</p>
+</div>
+
+<div class="quality-kpis">
+  <div class="metric-pill"><span>{{ quality.original_rows if quality.original_rows is defined else profile.rows }}</span><small>Comentários carregados</small></div>
+  <div class="metric-pill"><span>{{ quality.valid_rows }}</span><small>Referência humana válida</small></div>
+  <div class="metric-pill warning"><span>{{ quality.tie_rows|default(0) }}</span><small>Empates</small></div>
+  <div class="metric-pill warning"><span>{{ quality.insufficient_rows|default(0) }}</span><small>Insuficiência de decisão</small></div>
+  <div class="metric-pill"><span>{{ '%.2f'|format(quality.avg_agreement) }}</span><small>Concordância média</small></div>
+  <div class="metric-pill"><span>{{ '%.2f'|format(quality.avg_ambiguity) }}</span><small>Ambiguidade média</small></div>
+</div>
+
+{% if quality.reference_mode == 'votacao_maioria' %}
+<div class="card wide">
+  <h3>1. Qualidade da rotulagem original</h3>
+  <p class="small">Mostra o que foi recebido de cada avaliador antes da normalização. “Variações normalizadas” são rótulos reconhecidos que não estavam escritos exatamente como uma das quatro classes canônicas.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Avaliador</th><th>Total</th><th>Reconhecidos</th><th>Canônicos originais</th><th>Variações normalizadas</th><th>Vazios</th><th>Não reconhecidos</th></tr></thead>
+    <tbody>{% for evaluator, q in quality.evaluator_quality.items() %}<tr>
+      <td>{{ evaluator }}</td><td>{{ q.total }}</td><td>{{ q.recognized }}</td><td>{{ q.canonical_original }}</td><td>{{ q.normalized_variants }}</td><td>{{ q.empty }}</td><td>{{ q.invalid }}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+
+  <details style="margin-top:1rem;"><summary><strong>Ver valores originais encontrados</strong></summary>
+    {% for evaluator, q in quality.evaluator_quality.items() %}
+      <h4>{{ evaluator }}</h4>
+      <div class="table-wrap"><table><thead><tr><th>Valor original</th><th>Quantidade</th></tr></thead><tbody>
+      {% for value, count in q.raw_values.items() %}<tr><td>{{ value }}</td><td>{{ count }}</td></tr>{% endfor %}
+      </tbody></table></div>
+    {% endfor %}
+  </details>
+</div>
+
+<div class="card wide">
+  <h3>2. Resultado da normalização</h3>
+  <p class="small">Os rótulos reconhecidos são convertidos para Positivo, Negativo, Neutro ou Misto. Combinações de valência positiva e negativa são normalizadas como Misto. Vazios e valores não reconhecidos não se tornam classes de sentimento.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Avaliador</th><th>Positivo</th><th>Negativo</th><th>Neutro</th><th>Misto</th><th>Vazio</th><th>Inválido</th></tr></thead>
+    <tbody>{% for evaluator, q in quality.evaluator_quality.items() %}<tr>
+      <td>{{ evaluator }}</td><td>{{ q.normalized_distribution.positivo }}</td><td>{{ q.normalized_distribution.negativo }}</td><td>{{ q.normalized_distribution.neutro }}</td><td>{{ q.normalized_distribution.misto }}</td><td>{{ q.empty }}</td><td>{{ q.invalid }}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+
+<div class="card wide">
+  <h3>3. Consolidação da referência humana</h3>
+  <p class="small">Há consenso quando pelo menos dois julgamentos válidos concordam. Empate significa dois ou mais votos válidos sem maioria; insuficiência de decisão significa menos de dois votos válidos.</p>
+  <div class="table-wrap"><table><thead><tr><th>Situação</th><th>Quantidade</th><th>Uso na referência</th></tr></thead><tbody>
+    <tr><td>Unanimidade</td><td>{{ quality.status_counts.unanimidade|default(0) }}</td><td>Incluído</td></tr>
+    <tr><td>Maioria</td><td>{{ quality.status_counts.maioria|default(0) }}</td><td>Incluído</td></tr>
+    <tr><td>Empate</td><td>{{ quality.status_counts.empate|default(0) }}</td><td>Excluído</td></tr>
+    <tr><td>Insuficiência de decisão</td><td>{{ quality.status_counts.insuficiencia|default(0) }}</td><td>Excluído</td></tr>
+    <tr><td><strong>Referência humana válida</strong></td><td><strong>{{ quality.valid_rows }}</strong></td><td><strong>Ground truth</strong></td></tr>
+  </tbody></table></div>
+</div>
+{% endif %}
+
+<div class="card wide">
+  <h3>Distribuição da referência humana final</h3>
+  <div class="table-wrap"><table><thead><tr><th>Classe</th><th>Quantidade</th></tr></thead><tbody>
+    {% for label, count in quality.distribution.items() %}<tr><td>{{ label|capitalize }}</td><td>{{ count }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+
+{% if audit_rows or quality.reference_mode == 'votacao_maioria' %}
+<div class="card wide">
+  <h3>Auditoria detalhada da consolidação</h3>
+  <p class="small">Rastreabilidade linha a linha dos rótulos originais, normalizados e da decisão humana. Os filtros não alteram a referência consolidada.</p>
+  <div class="actions">
+    <a class="btn{% if audit_status == 'todos' %} primary{% endif %}" href="{{ url_for('main.data_quality', status='todos') }}">Todos</a>
+    <a class="btn{% if audit_status == 'unanimidade' %} primary{% endif %}" href="{{ url_for('main.data_quality', status='unanimidade') }}">Unanimidade</a>
+    <a class="btn{% if audit_status == 'maioria' %} primary{% endif %}" href="{{ url_for('main.data_quality', status='maioria') }}">Maioria</a>
+    <a class="btn{% if audit_status == 'empate' %} primary{% endif %}" href="{{ url_for('main.data_quality', status='empate') }}">Empate</a>
+    <a class="btn{% if audit_status == 'insuficiencia' %} primary{% endif %}" href="{{ url_for('main.data_quality', status='insuficiencia') }}">Insuficiência</a>
+  </div>
+  {% if audit_rows %}<div class="table-wrap preview-scroll"><table><thead><tr>
+    {% for key in audit_rows[0].keys() %}<th>{{ key }}</th>{% endfor %}
+  </tr></thead><tbody>{% for row in audit_rows %}<tr>{% for value in row.values() %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="small">Nenhum registro para o filtro selecionado.</p>{% endif %}
+</div>
+{% endif %}
+
+<div class="card wide"><div class="actions">
+  <a class="btn" href="{{ url_for('main.configure') }}">← Voltar</a>
+  <a class="btn" href="{{ url_for('main.download', kind='prepared') }}">Baixar base preparada</a>
+  <a class="btn primary" id="discover-models-btn" href="{{ url_for('main.models') }}">Avançar para modelos</a>
+  <a class="btn" href="{{ url_for('main.index') }}">Terminar</a>
+</div></div>
+
+<div id="discovery-overlay" class="execution-overlay" style="display:none;">
+  <div class="execution-modal">
+    <div class="loader-ring"></div>
+    <h2>Descoberta de modelos em execução</h2>
+    <p>Consultando os provedores configurados e realizando a triagem dos modelos para a tarefa textual.</p>
+    <p class="small">Esta etapa não executa inferência, não analisa os comentários e não consome tokens de geração.</p>
+    <p class="small">Aguarde a conclusão desta etapa.</p>
+  </div>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const btn=document.getElementById("discover-models-btn");
+  const overlay=document.getElementById("discovery-overlay");
+  if(btn && overlay) btn.addEventListener("click", function(){ overlay.style.display="flex"; });
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,301 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+.catalog-audit-box { margin: 10px 0 14px; }
+.catalog-audit-box summary { cursor: pointer; font-size: .88rem; font-weight: 700; }
+.catalog-audit-content { margin-top: 8px; padding: 10px 12px; border: 1px solid rgba(148,163,184,.18); border-radius: 10px; }
+.raw-model-list { max-height: 220px; overflow-y: auto; margin: 8px 0 0; padding-left: 28px; }
+.raw-model-list li { margin: 4px 0; overflow-wrap: anywhere; }
+</style>
+
+
+
+<div class="page-head">
+  <p class="eyebrow">Fase 3</p>
+  <h1>Descoberta e triagem de modelos para a tarefa</h1>
+  <p>
+    Os modelos são listados pelos provedores e triados automaticamente quanto à capacidade para classificação textual/sentimento.
+    Esta etapa não executa inferência nem utiliza os comentários da referência humana.
+  </p>
+</div>
+
+
+<form method="post" id="models-form">
+
+  <div class="selection-toolbar card wide">
+    <div>
+      <h3>Seleção de modelos</h3>
+      <p class="small">
+        Escolha entre os modelos cuja capacidade textual/classificatória foi confirmada pela triagem. Quota e disponibilidade momentânea não alteram a elegibilidade.
+      </p>
+    </div>
+
+    <div class="toolbar-actions">
+      <button class="btn primary" type="button"
+              onclick="selectTopRecommendedPerProvider()">
+        Selecionar N elegíveis
+      </button>
+
+      <button class="btn" type="button"
+              onclick="selectRecommended()">
+        Todos elegíveis
+      </button>
+
+      <button class="btn" type="button"
+              onclick="clearModels()">
+        Limpar
+      </button>
+    </div>
+  </div>
+
+  <section class="provider-model-grid">
+
+    {% for p in discovered %}
+    <div class="card provider-model-card">
+
+      <div class="provider-head refined">
+        <div>
+          <h2>{{ p.provider|upper }}</h2>
+        </div>
+
+        <div class="provider-counts compact">
+          <span><b>{{ p.counts.discovered }}</b> descobertos pela API</span>
+          <span class="good"><b>{{ p.counts.eligible }}</b> elegíveis</span>
+          <span class="warn"><b>{{ p.counts.experimental }}</b> experimentais</span>
+        </div>
+      </div>
+
+      <details class="catalog-audit-box">
+        <summary>Ver catálogo bruto retornado pela API ({{ p.raw_count }})</summary>
+        <div class="catalog-audit-content">
+          <p class="small">
+            IDs recebidos diretamente do endpoint do provedor, antes da triagem.
+            {% if p.duplicate_count %} {{ p.duplicate_count }} duplicado(s) foram removidos antes da classificação.{% endif %}
+          </p>
+          {% if p.error %}
+          <p class="small"><b>Erro de descoberta:</b> {{ p.error }}</p>
+          {% endif %}
+          {% if p.raw_models %}
+          <ol class="raw-model-list">
+            {% for model_id in p.raw_models %}
+            <li><code>{{ model_id }}</code></li>
+            {% endfor %}
+          </ol>
+          {% else %}
+          <p class="small">Nenhum modelo foi retornado pela API.</p>
+          {% endif %}
+        </div>
+      </details>
+
+      <div class="provider-controls inline-control">
+
+        <div>
+          <label for="limit_{{ p.provider }}">
+            Selecionar elegíveis
+          </label>
+        </div>
+
+        <input
+          id="limit_{{ p.provider }}"
+          class="limit-input"
+          type="number"
+          min="0"
+          max="{{ p.counts.eligible }}"
+          value="{{ 3 if p.counts.eligible >= 3 else p.counts.eligible }}"
+          data-provider-limit="{{ p.provider }}"
+        >
+
+        <button
+          class="btn tiny"
+          type="button"
+          onclick="selectTopForProvider('{{ p.provider }}')">
+          Aplicar
+        </button>
+
+      </div>
+
+      {% if p.eligible_models %}
+      <div class="model-list scrollable-model-list">
+
+        {% for m in p.eligible_models|sort(attribute='id') %}
+
+        <label class="model-row {{ m.status }}">
+
+          <input
+            type="checkbox"
+            name="model__{{ p.provider }}"
+            value="{{ m.id }}"
+            data-provider="{{ p.provider }}"
+            data-status="{{ m.status }}"
+            data-eligible="true"
+          >
+
+          <span class="model-name">{{ m.id }}</span>
+
+          <span class="status-pill {{ m.status }}">
+            {{ m.status }}
+          </span>
+          {% if m.profile is defined %}
+          {% endif %}
+
+        </label>
+
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if p.review_models %}
+      <details class="excluded-box compact-excluded">
+        <summary>Revisão ({{ p.counts.review }})</summary>
+        <div class="excluded-list scrollable-excluded-list">
+          {% for m in p.review_models %}
+          <div class="excluded-row" title="{{ m.reason }}">
+            <span class="model-name">{{ m.id }}</span>
+            <span class="status-pill blocked">Revisão</span>
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+
+      {% if p.blocked_models %}
+      <details class="excluded-box compact-excluded">
+        <summary>Não elegíveis ({{ p.counts.blocked }})</summary>
+        <div class="excluded-list scrollable-excluded-list">
+          {% for m in p.blocked_models %}
+          <div class="excluded-row" title="{{ m.reason }}">
+            <span class="model-name">{{ m.id }}</span>
+            <span class="status-pill blocked">Não elegível</span>
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+
+    </div>
+    {% endfor %}
+
+  </section>
+
+  <div class="actions sticky-actions refined-sticky-actions">
+
+    <div class="selection-summary">
+      <b id="selected-count">0</b>
+      modelos selecionados
+    </div>
+
+    <div class="sticky-buttons">
+
+      <a class="btn back-btn"
+         href="{{ url_for('main.configure') }}">
+        ← Voltar
+      </a>
+
+      <button class="btn primary" type="submit">
+        Selecionar modelos e avançar →
+      </button>
+
+    </div>
+
+  </div>
+
+</form>
+
+
+<script>
+
+function allEligibleCheckboxes() {
+  return Array.from(
+    document.querySelectorAll(
+      'input[data-eligible="true"]'
+    )
+  );
+}
+
+function updateSelectedCount() {
+
+  const count = allEligibleCheckboxes()
+    .filter(cb => cb.checked).length;
+
+  document.getElementById(
+    'selected-count'
+  ).textContent = count;
+}
+
+function setChecked(filterFn) {
+
+  allEligibleCheckboxes().forEach(cb => {
+    cb.checked = filterFn(cb);
+  });
+
+  updateSelectedCount();
+}
+
+function selectRecommended() {
+  // Todos os modelos classificados como elegíveis, inclusive experimentais.
+  setChecked(cb => cb.dataset.eligible === 'true');
+}
+
+function clearModels() {
+
+  setChecked(() => false);
+}
+
+function selectTopForProvider(provider) {
+
+  const limitInput =
+    document.querySelector(
+      `[data-provider-limit="${provider}"]`
+    );
+
+  const limit = Math.max(
+    0,
+    parseInt(limitInput?.value || '0', 10)
+  );
+
+  const items = allEligibleCheckboxes()
+    .filter(cb =>
+      cb.dataset.provider === provider &&
+      cb.dataset.eligible === 'true'
+    );
+
+  allEligibleCheckboxes()
+    .filter(cb =>
+      cb.dataset.provider === provider
+    )
+    .forEach(cb => cb.checked = false);
+
+  items.slice(0, limit)
+       .forEach(cb => cb.checked = true);
+
+  updateSelectedCount();
+}
+
+function selectTopRecommendedPerProvider() {
+
+  document
+    .querySelectorAll('[data-provider-limit]')
+    .forEach(input => {
+
+      selectTopForProvider(
+        input.dataset.providerLimit
+      );
+
+    });
+
+  updateSelectedCount();
+}
+
+allEligibleCheckboxes()
+  .forEach(cb =>
+    cb.addEventListener(
+      'change',
+      updateSelectedCount
+    )
+  );
+
+updateSelectedCount();
+
+</script>
+
+{% endblock %}

@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="page-head">
+  <p class="eyebrow">Fase 2 • Configuração da base</p>
+  <h1>Configuração da base de validação</h1>
+  <p>Selecione a coluna textual e indique como o sistema deve obter a referência humana.</p>
+</div>
+
+<form class="card wide configure-form" method="post">
+  <div class="form-step">
+    <div class="step-number">1</div>
+    <div>
+      <h3>Coluna textual</h3>
+      <p class="small">Escolha a coluna que contém os comentários a serem analisados.</p>
+    </div>
+  </div>
+
+  <select name="text_col" id="text_col" required>
+    {% for c in columns %}
+      <option value="{{ c }}">{{ c }}</option>
+    {% endfor %}
+  </select>
+
+  <hr class="soft-sep">
+
+  <div class="form-step">
+    <div class="step-number">2</div>
+    <div>
+      <h3>Tipo de referência humana</h3>
+      <p class="small">Informe se a base já possui rótulo final ou se o sistema deve consolidar múltiplos avaliadores.</p>
+    </div>
+  </div>
+
+  <div class="mode-grid">
+    <label class="mode-card active" id="mode-final-card">
+      <input type="radio" name="reference_mode" value="final" checked>
+      <strong>Base já consolidada</strong>
+      <span>Usar uma coluna de rótulo humano final.</span>
+    </label>
+
+    <label class="mode-card" id="mode-multiple-card">
+      <input type="radio" name="reference_mode" value="multiple">
+      <strong>Múltiplos avaliadores</strong>
+      <span>Calcular consenso por maioria entre avaliadores humanos.</span>
+    </label>
+  </div>
+
+  <div id="final-reference-block" class="reference-block">
+    <h3>Rótulo humano final</h3>
+    <p class="small">Escolha a coluna que contém o rótulo consolidado usado como ground truth.</p>
+
+    <select name="reference_col" id="reference_col">
+      <option value="">Selecione o rótulo final humano</option>
+      {% for c in columns %}
+        <option value="{{ c }}">{{ c }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div id="multiple-reference-block" class="reference-block" style="display:none;">
+    <h3>Colunas dos avaliadores humanos</h3>
+    <p class="small">Selecione duas ou mais colunas de avaliação humana. O sistema normaliza cada julgamento antes da votação. Empates e casos com menos de dois votos válidos ficam fora da referência humana final.</p>
+
+    <div class="checkgrid label-grid" id="label-grid">
+      {% for c in columns %}
+        <label class="check-card" data-column="{{ c }}">
+          <input type="checkbox" name="label_cols" value="{{ c }}">
+          <span>{{ c }}</span>
+        </label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="actions">
+    <a class="btn" href="{{ url_for('main.upload') }}">← Voltar</a>
+    <button class="btn primary" type="submit">Validar base e continuar →</button>
+    <a class="btn" href="{{ url_for('main.index') }}">Terminar</a>
+  </div>
+</form>
+
+<div class="card wide preview-card" id="preview-card" style="display:none;">
+  <h3>Pré-visualização da base</h3>
+  <p class="small">Amostra das primeiras linhas para conferência das colunas.</p>
+  <div class="table-wrap preview-scroll">
+  <table>
+    <thead>
+      <tr id="preview-head"></tr>
+    </thead>
+
+    <tbody id="preview-body">
+      {% for row in preview %}
+        <tr data-preview-row>
+          {% for c in columns %}
+            <td data-col="{{ c }}">{{ row[c] }}</td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const radios = document.querySelectorAll("input[name='reference_mode']");
+  const finalBlock = document.getElementById("final-reference-block");
+  const multipleBlock = document.getElementById("multiple-reference-block");
+  const finalCard = document.getElementById("mode-final-card");
+  const multipleCard = document.getElementById("mode-multiple-card");
+  const textSelect = document.getElementById("text_col");
+  const labelCards = document.querySelectorAll(".check-card");
+  const referenceSelect = document.getElementById("reference_col");
+
+  function updateMode(){
+    const mode = document.querySelector("input[name='reference_mode']:checked").value;
+
+    finalBlock.style.display = mode === "final" ? "block" : "none";
+    multipleBlock.style.display = mode === "multiple" ? "block" : "none";
+
+    finalCard.classList.toggle("active", mode === "final");
+    multipleCard.classList.toggle("active", mode === "multiple");
+
+    updatePreview();
+  }
+
+  function hideTextColumnFromLabels(){
+    const textCol = textSelect.value;
+
+    labelCards.forEach(card => {
+      const input = card.querySelector("input");
+
+      if (input.value === textCol) {
+        input.checked = false;
+        card.style.display = "none";
+      } else {
+        card.style.display = "flex";
+      }
+    });
+
+    Array.from(referenceSelect.options).forEach(option => {
+      option.disabled = option.value === textCol;
+    });
+
+    if (referenceSelect.value === textCol) {
+      referenceSelect.value = "";
+    }
+
+    updatePreview();
+  }
+
+  function updatePreview(){
+    const previewCard = document.getElementById("preview-card");
+    const previewHead = document.getElementById("preview-head");
+    const rows = document.querySelectorAll("[data-preview-row]");
+    const textCol = textSelect.value;
+    const mode = document.querySelector("input[name='reference_mode']:checked").value;
+
+    let selectedCols = [];
+
+    if (mode === "final") {
+      const refCol = referenceSelect.value;
+
+      if (textCol && refCol) {
+        selectedCols = [textCol, refCol];
+      }
+    } else {
+      const checked = Array.from(document.querySelectorAll("input[name='label_cols']:checked"))
+        .map(input => input.value);
+
+      if (textCol && checked.length > 0) {
+        selectedCols = [textCol, ...checked];
+      }
+    }
+
+    if (selectedCols.length === 0) {
+      previewCard.style.display = "none";
+      return;
+    }
+
+    previewCard.style.display = "block";
+
+    previewHead.innerHTML = selectedCols
+      .map(col => `<th>${col}</th>`)
+      .join("");
+
+    rows.forEach(row => {
+      const originalCells = Array.from(row.querySelectorAll("[data-col]"));
+
+      row.innerHTML = selectedCols
+        .map(col => {
+          const cell = originalCells.find(td => td.dataset.col === col);
+          return `<td data-col="${col}">${cell ? cell.innerHTML : ""}</td>`;
+        })
+        .join("");
+    });
+  }
+
+  radios.forEach(radio => radio.addEventListener("change", updateMode));
+  textSelect.addEventListener("change", hideTextColumnFromLabels);
+  referenceSelect.addEventListener("change", updatePreview);
+
+  document.querySelectorAll("input[name='label_cols']").forEach(input => {
+    input.addEventListener("change", updatePreview);
+  });
+
+  updateMode();
+  hideTextColumnFromLabels();
+});
+</script>
+
+{% endblock %}

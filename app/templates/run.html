@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="page-head">
+  <p class="eyebrow">Fase 4</p>
+  <h1>Executar validação real</h1>
+  <p>
+    Serão avaliadas {{ rows }} linhas com os modelos selecionados.
+    A execução será feita em paralelo.
+  </p>
+</div>
+
+<div class="metric-strip">
+  <div class="metric-pill">
+    <span>{{ rows }}</span>
+    <small>Comentários</small>
+  </div>
+
+  <div class="metric-pill">
+    <span>{{ selected|length }}</span>
+    <small>Modelos selecionados</small>
+  </div>
+
+  <div class="metric-pill">
+    <span>{{ max_workers }}</span>
+    <small>Execuções paralelas</small>
+  </div>
+</div>
+
+<div class="card wide">
+  <h3>Modelos selecionados</h3>
+  <p class="small">
+    Rate limits recebem backoff e nova tentativa; falhas transitórias recebem nova tentativa. Falhas permanentes confirmadas podem interromper a execução imediatamente; se persistirem {{ failure_limit }} falhas técnicas consecutivas, o modelo é marcado como não avaliado por instabilidade técnica, sem ser tratado como reprovado por desempenho.
+  </p>
+
+  <div class="selected-grid" id="selected-models">
+    {% for s in selected %}
+      <div class="selected-model-chip" data-model="{{ s.provider }} / {{ s.model }}">
+        <b>{{ s.provider }}</b>
+        <span>{{ s.model }}</span>
+      </div>
+    {% endfor %}
+  </div>
+
+  <form method="post" id="run-form">
+    <div class="actions">
+      <a class="btn" href="{{ url_for('main.models') }}">← Voltar</a>
+      <button class="btn primary" type="submit">Executar agora</button>
+      <a class="btn" href="{{ url_for('main.index') }}">Terminar</a>
+    </div>
+  </form>
+</div>
+
+<div class="execution-overlay" id="execution-overlay" style="display:none;">
+  <div class="execution-modal">
+    <div class="loader-ring"></div>
+
+     <h2>Validação em execução</h2>
+    <p>Os modelos selecionados estão sendo processados em paralelo.</p>
+
+    <div class="running-models-box">
+      <span>Modelos em execução</span>
+
+      <div class="running-models-list">
+  {% for s in selected %}
+    <div class="running-model-item waiting"
+         data-run-model="{{ s.provider }}::{{ s.model }}">
+      <span>
+        <b>{{ s.provider }}</b> — {{ s.model }}
+      </span>
+
+      <div class="status-area">
+  <em class="model-state">aguardando</em>
+  <small class="model-reason"></small>
+</div>
+    </div>
+  {% endfor %}
+</div>
+    </div>
+
+    <p class="small">
+      O sistema distingue falhas permanentes, falhas de resposta do modelo e instabilidades técnicas transitórias. Registros não executados após uma interrupção são contabilizados separadamente. Aguarde a conclusão da validação.
+    </p>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.getElementById("run-form");
+  const overlay = document.getElementById("execution-overlay");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    overlay.style.display = "flex";
+
+    const response = await fetch("{{ url_for('main.run_start') }}", {
+      method: "POST"
+    });
+
+    const data = await response.json();
+
+    if (!data.run_id) {
+      alert("Não foi possível iniciar a execução.");
+      overlay.style.display = "none";
+      return;
+    }
+
+    const runId = data.run_id;
+
+    const labels = {
+      waiting: "aguardando",
+      running: "em execução",
+      done: "concluído",
+      failed: "falha permanente/protocolo",
+      rate_limited: "não avaliado — limitação de taxa",
+      temporary_instability: "não avaliado — instabilidade técnica"
+    };
+
+    const timer = setInterval(async () => {
+      const statusResponse = await fetch(`/run-status/${runId}`);
+      const status = await statusResponse.json();
+
+      const models = Object.values(status.models || {});
+
+      Object.entries(status.models || {}).forEach(([key, item]) => {
+        const el = document.querySelector(`[data-run-model="${key}"]`);
+
+        if (el) {
+          el.className = `running-model-item ${item.status}`;
+
+          const state = el.querySelector(".model-state");
+          if (state) {
+            state.textContent = labels[item.status] || item.status;
+          }
+
+          const reason = el.querySelector(".model-reason");
+          if (reason && item.message) {
+            reason.textContent = item.message;
+          }
+        }
+      });
+
+      // Os estados individuais dos modelos podem terminar antes de o backend
+      // concluir a persistência dos CSV/JSON da execução. Portanto, a navegação
+      // para Resultados depende exclusivamente do estado terminal GLOBAL.
+      // Isso evita a corrida: modelos finalizados -> /results ainda sem summary
+      // -> redirecionamento de volta para a Fase 4.
+      if (status.status === "done") {
+        clearInterval(timer);
+
+        const destination = status.results_url || `/results?run_id=${runId}`;
+        window.location.replace(destination);
+        return;
+      }
+
+      if (status.status === "failed") {
+        clearInterval(timer);
+        alert("Erro na execução: " + status.message);
+        overlay.style.display = "none";
+      }
+
+    }, 1500);
+  });
+});
+</script>
+
+{% endblock %}

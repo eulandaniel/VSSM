@@ -1,0 +1,336 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="page-head">
+  <p class="eyebrow">Fases 5–8</p>
+  <h1>Resultados da validação semântica</h1>
+  <p>Decisão final baseada em alinhamento humano, estabilidade operacional e diagnóstico das classificações.</p>
+</div>
+
+{% set failed_summaries = failed_summaries if failed_summaries is defined else [] %}
+{% set executive = executive if executive is defined else {} %}
+
+<div class="result-kpis">
+  <div class="metric-pill">
+    <span>{{ executive.comments if executive.comments is defined else '-' }}</span>
+    <small>Comentários avaliados</small>
+  </div>
+
+  <div class="metric-pill">
+    <span>{{ executive.models_tested if executive.models_tested is defined else summaries|length }}</span>
+    <small>Modelos testados</small>
+  </div>
+
+  <div class="metric-pill">
+    <span>{{ executive.valid_models if executive.valid_models is defined else summaries|length }}</span>
+    <small>Modelos com cobertura integral</small>
+  </div>
+
+  <div class="metric-pill warning">
+    <span>{{ executive.rate_limited_models if executive.rate_limited_models is defined else rate_limited_summaries|length }}</span>
+    <small>Limitação de taxa</small>
+  </div>
+  <div class="metric-pill warning">
+    <span>{{ executive.temporary_models if executive.temporary_models is defined else temporary_summaries|length }}</span>
+    <small>Não avaliados por instabilidade</small>
+  </div>
+  <div class="metric-pill warning">
+    <span>{{ executive.failed_models if executive.failed_models is defined else failed_summaries|length }}</span>
+    <small>Falha permanente/protocolo</small>
+  </div>
+</div>
+
+{% if winner %}
+<section class="winner decision-card">
+  <span>Modelo com maior SARH nesta execução</span>
+  <h2>{{ winner.provider }} / {{ winner.model }}</h2>
+
+  <p>
+    SARH:
+    <b>{{ '%.4f'|format(winner.sarh if winner.sarh is defined else (winner.framework_score if winner.framework_score is defined else winner.svsm_score)) }}</b>
+    · Macro-F1:
+    <b>{{ '%.3f'|format(winner.macro_f1) }}</b>
+    · Kappa:
+    <b>{{ '%.3f'|format(winner.kappa if winner.kappa is defined else 0) }}</b>
+    · Accuracy:
+    <b>{{ '%.3f'|format(winner.accuracy if winner.accuracy is defined else 0) }}</b>
+  </p>
+</section>
+
+{% if recommendation %}
+<section class="card wide recommendation-box">
+  <h3>Resultado da validação</h3>
+  <p>{{ recommendation }}</p>
+</section>
+{% endif %}
+{% endif %}
+
+<section class="card wide">
+  <h3>Métricas de decisão — modelos válidos</h3>
+  <p class="small">Apenas modelos válidos entram no ranking principal. Somente modelos com 100% de cobertura da referência humana entram no ranking principal; os demais são separados abaixo.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Provedor</th>
+          <th>Modelo</th>
+          <th>Score</th>
+          <th>Accuracy</th>
+          <th>Acertos</th>
+          <th>Divergências</th>
+          <th>Erros</th>
+          <th>Macro-F1</th>
+          <th>Macro-Recall</th>
+          <th>Kappa</th>
+          <th>Latência</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for s in summaries %}
+        {% set valid = s.valid_predictions if s.valid_predictions is defined else 0 %}
+        {% set errors = s.errors if s.errors is defined else 0 %}
+        {% set accuracy = s.accuracy if s.accuracy is defined else 0 %}
+        {% set hits = (accuracy * valid)|round(0, 'floor')|int %}
+        {% set divergences = valid - hits %}
+        <tr>
+          <td>{{ s.provider }}</td>
+          <td>{{ s.model }}</td>
+          <td><b>{{ '%.4f'|format(s.sarh if s.sarh is defined else (s.framework_score if s.framework_score is defined else s.svsm_score)) }}</b></td>
+          <td>{{ '%.3f'|format(accuracy) }}</td>
+          <td><span class="badge-ok">{{ hits }}</span></td>
+          <td><span class="badge-warn">{{ divergences }}</span></td>
+          <td><span class="badge-error">{{ errors }}</span></td>
+          <td>{{ '%.3f'|format(s.macro_f1) }}</td>
+          <td>{{ '%.3f'|format(s.macro_recall if s.macro_recall is defined else 0) }}</td>
+          <td>{{ '%.3f'|format(s.kappa if s.kappa is defined else 0) }}</td>
+          <td>{{ '%.2f'|format(s.avg_latency) }}s</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="actions">
+    <a class="btn" href="{{ url_for('main.download', kind='results', run_id=request.args.get('run_id')) }}">Baixar previsões CSV</a>
+    <a class="btn" href="{{ url_for('main.download', kind='summary', run_id=request.args.get('run_id')) }}">Baixar resumo JSON</a>
+  </div>
+</section>
+
+{% if winner %}
+<section class="card wide">
+  <h3>Diagnóstico do vencedor</h3>
+
+  {% set valid = winner.valid_predictions if winner.valid_predictions is defined else 0 %}
+  {% set errors = winner.errors if winner.errors is defined else 0 %}
+  {% set accuracy = winner.accuracy if winner.accuracy is defined else 0 %}
+  {% set hits = (accuracy * valid)|round(0, 'floor')|int %}
+  {% set divergences = valid - hits %}
+
+  <div class="diagnostic-grid">
+    <div class="diagnostic-card">
+      <span>Acertos</span>
+      <b>{{ hits }}</b>
+      <small>IA igual ao rótulo humano</small>
+    </div>
+
+    <div class="diagnostic-card">
+      <span>Divergências</span>
+      <b>{{ divergences }}</b>
+      <small>IA diferente do rótulo humano</small>
+    </div>
+
+    <div class="diagnostic-card">
+      <span>Erros operacionais</span>
+      <b>{{ errors }}</b>
+      <small>Timeout, resposta inválida ou falha API</small>
+    </div>
+
+    <div class="diagnostic-card">
+      <span>Taxa de erro</span>
+      <b>{{ '%.1f'|format(winner.error_rate if winner.error_rate is defined else 0) }}%</b>
+      <small>Previsões inválidas</small>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if sensitivity_winners %}
+<section class="card wide">
+  <h3>Análise de sensibilidade do SARH</h3>
+  <p class="small">Os cenários alternativos foram pré-especificados e servem apenas para testar a estabilidade do ranking; o vencedor oficial é definido pelo cenário principal.</p>
+  <div class="table-wrap"><table><thead><tr><th>Cenário</th><th>Modelo em 1º lugar</th><th>Score</th></tr></thead><tbody>
+  {% for scenario, item in sensitivity_winners.items() %}<tr><td>{{ scenario }}</td><td>{{ item.provider }} / {{ item.model }}</td><td>{{ '%.4f'|format(item.score) }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  <p><b>Estabilidade:</b> {% if sensitivity_stable %}o mesmo modelo permaneceu em primeiro lugar em todos os cenários.{% else %}o primeiro colocado variou entre os cenários; a sensibilidade deve ser considerada na interpretação dos resultados.{% endif %}</p>
+</section>
+{% endif %}
+
+{% if winner and winner.metrics is defined and winner.metrics %}
+<section class="card wide">
+  <h3>Desempenho por classe — modelo vencedor</h3>
+  {% if winner.metrics.supported_labels is defined %}
+  <p class="small">
+    <b>Classes do domínio:</b> {{ winner.metrics.labels|join(', ') }}.
+    <b>Classes representadas na referência desta execução:</b> {{ winner.metrics.supported_labels|join(', ') }}.
+    {% if winner.metrics.unsupported_labels %}
+      <b>Sem suporte humano nesta execução:</b> {{ winner.metrics.unsupported_labels|join(', ') }}.
+      Classes sem suporte permanecem na matriz de confusão e no diagnóstico por classe, mas não entram no denominador das médias macro.
+    {% endif %}
+  </p>
+  {% endif %}
+  <p class="small">Precision, Recall e F1 são apresentados separadamente para cada classe; estes valores explicam a composição das métricas macro.</p>
+  <div class="table-wrap"><table><thead><tr><th>Classe</th><th>Precision</th><th>Recall</th><th>F1</th><th>Suporte</th></tr></thead><tbody>
+  {% for label, m in winner.metrics.per_class.items() %}<tr><td>{{ label|capitalize }}</td><td>{{ '%.3f'|format(m.precision) }}</td><td>{{ '%.3f'|format(m.recall) }}</td><td>{{ '%.3f'|format(m.f1) }}</td><td>{{ m.support }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+<section class="card wide">
+  <h3>Matriz de confusão — modelo vencedor</h3>
+  <p class="small">Linhas = referência humana consolidada; colunas = classificação do LLM.</p>
+  <div class="table-wrap"><table><thead><tr><th>Humano \ LLM</th>{% for label in winner.metrics.labels %}<th>{{ label|capitalize }}</th>{% endfor %}</tr></thead><tbody>
+  {% for row in winner.metrics.confusion_matrix %}<tr><th>{{ winner.metrics.labels[loop.index0]|capitalize }}</th>{% for value in row %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}
+  </tbody></table></div>
+</section>
+<section class="card wide">
+  <h3>Diagnósticos complementares</h3>
+  <p>Coerência heurística: <b>{{ '%.3f'|format(winner.avg_coherence) }}</b> · Explicabilidade heurística: <b>{{ '%.3f'|format(winner.avg_explainability) }}</b> · Latência média: <b>{{ '%.2f'|format(winner.avg_latency) }}s</b> · Taxa de erro: <b>{{ '%.1f'|format(winner.error_rate) }}%</b>.</p>
+  <p class="small">Esses indicadores são diagnósticos complementares e não compõem o SARH.</p>
+</section>
+{% endif %}
+
+{% if rate_limited_summaries %}
+<section class="card wide">
+  <h3>Modelos não avaliados por limitação operacional de taxa</h3>
+  <p class="small">Estes modelos não concluíram o protocolo porque a API impôs rate limit (HTTP 429). Isso não representa instabilidade nem reprovação do modelo.</p>
+  <div class="table-wrap failed-table-scroll">
+    <table>
+      <thead><tr><th>Provedor</th><th>Modelo</th><th>Previsões válidas</th><th>Falhas observadas</th><th>Não executados após interrupção</th><th>Motivo</th></tr></thead>
+      <tbody>
+      {% for s in rate_limited_summaries %}
+        <tr><td>{{ s.provider }}</td><td>{{ s.model }}</td>
+        <td>{{ s.valid_predictions }}/{{ s.total_rows }}</td>
+        <td>{{ s.observed_failures }}</td><td>{{ s.not_executed_after_stop }}</td>
+        <td>{{ s.failure_reason }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if temporary_summaries %}
+<section class="card wide">
+  <h3>Modelos não avaliados por instabilidade técnica</h3>
+  <p class="small">Estes modelos não concluíram o protocolo por indisponibilidade técnica transitória. Isso não representa reprovação por desempenho classificatório.</p>
+  <div class="table-wrap failed-table-scroll">
+    <table>
+      <thead><tr><th>Provedor</th><th>Modelo</th><th>Previsões válidas</th><th>Falhas observadas</th><th>Não executados após interrupção</th><th>Motivo</th></tr></thead>
+      <tbody>
+      {% for s in temporary_summaries %}
+        <tr>
+          <td>{{ s.provider }}</td><td>{{ s.model }}</td>
+          <td>{{ s.valid_predictions if s.valid_predictions is defined else 0 }}/{{ s.total_rows if s.total_rows is defined else 0 }}</td>
+          <td>{{ s.observed_failures if s.observed_failures is defined else s.errors }}</td>
+          <td>{{ s.not_executed_after_stop if s.not_executed_after_stop is defined else 0 }}</td>
+          <td>{{ s.failure_reason }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if failed_summaries %}
+<section class="card wide">
+  <h3>Modelos não considerados na decisão</h3>
+  <p class="small">Estes modelos não entraram no ranking porque não produziram uma classificação válida para 100% da referência humana consolidada. A regra preserva o mesmo denominador para todos os modelos ranqueados.</p>
+
+  <div class="table-wrap failed-table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Provedor</th>
+          <th>Modelo</th>
+          <th>Previsões válidas</th>
+          <th>Cobertura</th>
+          <th>Erros</th>
+          <th>Taxa de erro</th>
+          <th>Motivo principal</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for s in failed_summaries %}
+        <tr>
+          <td>{{ s.provider }}</td>
+          <td>{{ s.model }}</td>
+          <td>{{ s.valid_predictions if s.valid_predictions is defined else 0 }}</td>
+          <td>{{ '%.1f'|format(s.coverage if s.coverage is defined else 0) }}%</td>
+          <td><span class="badge-error">{{ s.errors if s.errors is defined else 0 }}</span></td>
+          <td>{{ '%.1f'|format(s.error_rate if s.error_rate is defined else 100) }}%</td>
+          <td>{{ s.failure_reason if s.failure_reason else 'Falha técnica ou ausência de previsões válidas.' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="card wide">
+  <h3>Amostra auditável</h3>
+  <p class="small">Exibe exemplos do modelo vencedor para auditoria da classificação.</p>
+
+  <div class="table-wrap audit-table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Modelo</th>
+          <th>Humano</th>
+          <th>IA</th>
+          <th>Resultado</th>
+          <th>Comentário</th>
+          <th>Justificativa</th>
+          <th>Evidência</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for r in sample %}
+        {% set match = r.human_consensus == r.model_label %}
+        <tr>
+          <td>{{ r.provider }}/{{ r.model }}</td>
+          <td>{{ r.human_consensus }}</td>
+          <td>{{ r.model_label }}</td>
+          <td>
+            {% if match %}
+              <span class="badge-ok">acerto</span>
+            {% elif r.model_label %}
+              <span class="badge-warn">divergência</span>
+            {% else %}
+              <span class="badge-error">erro</span>
+            {% endif %}
+          </td>
+          <td class="text-cell">{{ r.text }}</td>
+          <td class="text-cell">{{ r.model_justification }}</td>
+          <td class="text-cell">{{ r.model_evidence }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card wide final-actions-card">
+  <h3>Próxima ação</h3>
+  <p class="small">Você pode iniciar uma nova validação com outra base ou finalizar e voltar ao início do sistema.</p>
+
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('main.upload') }}">Realizar outra validação</a>
+    <a class="btn" href="{{ url_for('main.index') }}">Finalizar</a>
+  </div>
+</section>
+
+{% endblock %}

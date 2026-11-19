@@ -1,0 +1,224 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="page-head">
+  <p class="eyebrow">Histórico • Detalhes</p>
+  <h1>Detalhes da validação</h1>
+  <p>Registro auditável da execução, incluindo modelos válidos, falhas e configuração do experimento.</p>
+</div>
+
+<div class="result-kpis">
+  <div class="metric-pill">
+    <span>{{ record.total_comments if record.total_comments is defined else record.dataset_rows }}</span>
+    <small>Comentários carregados</small>
+  </div>
+
+  <div class="metric-pill">
+    <span>{{ record.valid_comments if record.valid_comments is defined else record.dataset_rows }}</span>
+    <small>Comentários válidos</small>
+  </div>
+
+  <div class="metric-pill warning">
+    <span>{{ record.tie_comments if record.tie_comments is defined else 0 }}</span>
+    <small>Empates humanos</small>
+  </div>
+
+  <div class="metric-pill">
+    <span>{{ record.models_selected if record.models_selected is defined else record.models_tested }}</span>
+    <small>Modelos selecionados</small>
+  </div>
+
+  <div class="metric-pill">
+    <span>{{ summaries|length }}</span>
+    <small>Com cobertura integral</small>
+  </div>
+
+  <div class="metric-pill warning">
+    <span>{{ rate_limited_summaries|length }}</span>
+    <small>Limitação de taxa</small>
+  </div>
+  <div class="metric-pill warning">
+    <span>{{ temporary_summaries|length }}</span>
+    <small>Não avaliados por instabilidade</small>
+  </div>
+
+  <div class="metric-pill warning">
+    <span>{{ failed_summaries|length }}</span>
+    <small>Falha permanente/protocolo</small>
+  </div>
+</div>
+
+<section class="winner decision-card">
+  <span>Modelo com maior SARH nesta execução</span>
+  <h2>{{ record.winner_provider }} / {{ record.winner_model }}</h2>
+
+  <p>
+    SARH: <b>{{ '%.4f'|format(record.sarh if record.sarh is defined else record.framework_score) }}</b>
+    · Accuracy: <b>{{ '%.3f'|format(record.accuracy if record.accuracy is defined else 0) }}</b>
+    · Macro-F1: <b>{{ '%.3f'|format(record.macro_f1 if record.macro_f1 is defined else 0) }}</b>
+    · Kappa: <b>{{ '%.3f'|format(record.kappa if record.kappa is defined else 0) }}</b>
+  </p>
+</section>
+
+<section class="card wide">
+  <h3>Ranking dos modelos válidos</h3>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Provedor</th>
+          <th>Modelo</th>
+          <th>SARH</th>
+          <th>Accuracy</th>
+          <th>Macro-F1</th>
+          <th>Kappa</th>
+          <th>Latência</th>
+          <th>Erros</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for s in summaries %}
+        <tr>
+          <td>{{ s.provider }}</td>
+          <td>{{ s.model }}</td>
+          <td><b>{{ '%.4f'|format(s.sarh if s.sarh is defined else (s.framework_score if s.framework_score is defined else s.svsm_score)) }}</b></td>
+          <td>{{ '%.3f'|format(s.accuracy if s.accuracy is defined else 0) }}</td>
+          <td>{{ '%.3f'|format(s.macro_f1 if s.macro_f1 is defined else 0) }}</td>
+          <td>{{ '%.3f'|format(s.kappa if s.kappa is defined else 0) }}</td>
+          <td>{{ '%.2f'|format(s.avg_latency if s.avg_latency is defined else 0) }}s</td>
+          <td>{{ s.errors if s.errors is defined else 0 }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8">Nenhum modelo válido encontrado para esta execução.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if rate_limited_summaries %}
+<section class="card wide">
+  <h3>Modelos não avaliados por limitação operacional de taxa</h3>
+  <p class="small">A API impôs rate limit (HTTP 429). Esses modelos não são tratados como instáveis nem como reprovados por desempenho.</p>
+  <div class="table-wrap failed-table-scroll"><table>
+    <thead><tr><th>Provedor</th><th>Modelo</th><th>Previsões válidas</th><th>Falhas observadas</th><th>Não executados</th><th>Motivo</th></tr></thead>
+    <tbody>{% for s in rate_limited_summaries %}
+      <tr><td>{{ s.provider }}</td><td>{{ s.model }}</td><td>{{ s.valid_predictions }}/{{ s.total_rows }}</td><td>{{ s.observed_failures }}</td><td>{{ s.not_executed_after_stop }}</td><td>{{ s.failure_reason }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+
+{% if temporary_summaries %}
+<section class="card wide">
+  <h3>Modelos não avaliados por instabilidade técnica</h3>
+  <p class="small">Estes modelos não concluíram o protocolo por indisponibilidade técnica transitória. Isso não representa reprovação por desempenho classificatório.</p>
+  <div class="table-wrap failed-table-scroll">
+    <table>
+      <thead><tr><th>Provedor</th><th>Modelo</th><th>Previsões válidas</th><th>Falhas observadas</th><th>Não executados após interrupção</th><th>Motivo</th></tr></thead>
+      <tbody>
+      {% for s in temporary_summaries %}
+        <tr>
+          <td>{{ s.provider }}</td><td>{{ s.model }}</td>
+          <td>{{ s.valid_predictions if s.valid_predictions is defined else 0 }}/{{ s.total_rows if s.total_rows is defined else 0 }}</td>
+          <td>{{ s.observed_failures if s.observed_failures is defined else s.errors }}</td>
+          <td>{{ s.not_executed_after_stop if s.not_executed_after_stop is defined else 0 }}</td>
+          <td>{{ s.failure_reason }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if failed_summaries %}
+<section class="card wide">
+  <h3>Modelos com falha permanente ou de protocolo</h3>
+
+  <div class="table-wrap failed-table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Provedor</th>
+          <th>Modelo</th>
+          <th>Previsões válidas</th>
+          <th>Erros</th>
+          <th>Taxa de erro</th>
+          <th>Motivo principal</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for s in failed_summaries %}
+        <tr>
+          <td>{{ s.provider }}</td>
+          <td>{{ s.model }}</td>
+          <td>{{ s.valid_predictions if s.valid_predictions is defined else 0 }}</td>
+          <td><span class="badge-error">{{ s.errors if s.errors is defined else 0 }}</span></td>
+          <td>{{ '%.1f'|format(s.error_rate if s.error_rate is defined else 100) }}%</td>
+          <td>{{ s.failure_reason if s.failure_reason else 'Falha técnica ou ausência de previsões válidas.' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card wide">
+  <h3>Falhas permanentes/protocolo por motivo</h3>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Motivo</th>
+          <th>Quantidade</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for reason, count in failure_counts.items() %}
+        <tr>
+          <td>{{ reason }}</td>
+          <td>{{ count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="card wide">
+  <h3>Configuração da execução</h3>
+
+  <div class="table-wrap">
+    <table>
+      <tbody>
+        <tr><th>Data/Hora</th><td>{{ record.created_at }}</td></tr>
+        <tr><th>Estratégia humana</th><td>{{ record.reference_mode if record.reference_mode else 'Não informado' }}</td></tr>
+        <tr><th>Concordância média</th><td>{{ '%.2f'|format(record.human_agreement if record.human_agreement is defined else 0) }}</td></tr>
+        <tr><th>Ambiguidade média</th><td>{{ '%.2f'|format(record.human_ambiguity if record.human_ambiguity is defined else 0) }}</td></tr>
+        <tr><th>Execuções paralelas</th><td>{{ record.max_workers if record.max_workers is defined else '-' }}</td></tr>
+        <tr><th>Limite operacional de falhas consecutivas persistentes</th><td>{{ record.failure_limit if record.failure_limit is defined else '-' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card wide">
+  <h3>Downloads da execução</h3>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('main.download', kind='results', run_id=run_id) }}">Baixar previsões CSV</a>
+    <a class="btn" href="{{ url_for('main.download', kind='summary', run_id=run_id) }}">Baixar resumo JSON</a>
+    <a class="btn" href="{{ url_for('main.history') }}">← Voltar ao histórico</a>
+    <a class="btn primary" href="{{ url_for('main.upload') }}">Nova validação</a>
+  </div>
+</section>
+
+{% endblock %}

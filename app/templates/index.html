@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<section class="home-dashboard">
+
+  <section class="hero-panel">
+    <div class="hero-logo-card">
+      <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="Logotipo FRAMEWORK">
+    </div>
+
+    <div class="hero-copy">
+      <span class="hero-kicker">FRAMEWORK</span>
+
+      <h1>VSSM — Validação Semântica e Seleção de Modelos</h1>
+      <p class="hero-purpose">Framework para seleção, avaliação e comparação auditável de modelos de linguagem aplicados à classificação de sentimento.</p>
+
+      <div class="hero-actions">
+        <a class="hero-cta" href="{{ url_for('main.upload') }}">
+          Validar modelos <span>→</span>
+        </a>
+
+        <a class="hero-cta secondary" href="{{ url_for('main.history') }}">
+          Ver histórico
+        </a>
+      </div>
+    </div>
+
+    <div class="network-visual" aria-hidden="true">
+      <span class="node n1"></span>
+      <span class="node n2"></span>
+      <span class="node n3"></span>
+      <span class="node n4"></span>
+      <span class="node n5"></span>
+      <i class="line l1"></i>
+      <i class="line l2"></i>
+      <i class="line l3"></i>
+      <i class="line l4"></i>
+    </div>
+  </section>
+
+  <section class="middle-grid">
+    <div class="glass-card connections-card">
+      <h2>Conexões ativas</h2>
+
+      <div class="provider-grid">
+        {% for provider, ok in status.items() %}
+          <div class="provider-card {{ 'connected' if ok else 'missing' }}">
+            <div class="provider-symbol">{{ provider[:1]|upper }}</div>
+            <strong>{{ provider|capitalize }}</strong>
+            <span><i></i>{{ 'conectado' if ok else 'sem chave' }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="glass-card flow-card">
+      <h2>Fluxo de validação</h2>
+
+      <div class="flow-track">
+        <div class="flow-step active"><b>1</b><span>Base<br>rotulada</span></div>
+        <div class="flow-step"><b>2</b><span>Consolidação<br>humana</span></div>
+        <div class="flow-step"><b>3</b><span>Descoberta<br>e triagem</span></div>
+        <div class="flow-step"><b>4</b><span>Execução<br>controlada</span></div>
+        <div class="flow-step"><b>5</b><span>Avaliação<br>e ranking</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats-panel">
+    <div class="stat-item">
+      <div class="stat-icon">◇</div>
+      <div>
+        <b>{{ status.values()|select('equalto', true)|list|length }}</b>
+        <span>Provedores<br>conectados</span>
+      </div>
+    </div>
+
+    <div class="stat-item">
+      <div class="stat-icon purple">□</div>
+      <div>
+        <b>API</b>
+        <span>Modelos reais<br>via provedores</span>
+      </div>
+    </div>
+
+    <div class="stat-item">
+      <div class="stat-icon blue">◎</div>
+      <div>
+        <b>100%</b>
+        <span>Cobertura exigida<br>da referência válida</span>
+      </div>
+    </div>
+
+    <div class="stat-item">
+      <div class="stat-icon cyan">↗</div>
+      <div>
+        <b>SARH</b>
+        <span>Aderência à referência humana<br>Ordenação dos modelos</span>
+      </div>
+    </div>
+  </section>
+
+</section>
+
+{% endblock %}
